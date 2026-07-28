@@ -140,7 +140,7 @@
 
     let tickets = [];
 
-// 初始化：自動向 Google 試算表 抓取資料
+    // 初始化：自動向 Google 試算表 抓取資料
     async function fetchTickets() {
         try {
             const res = await fetch(GAS_API_URL);
@@ -275,4 +275,5 @@
     // 首次開啟頁面時載入資料
     fetchTickets();
 </script>
+</body>
 </html>

@@ -136,14 +136,26 @@
 
 <script>
     // ⚠️ 請替換為您從 Google Apps Script 取得的部署網址
-    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzSYmhW5yEHw9UxeaDKQFoyfSQ90rmYZDK3iHoIT6TBV4iSZnmzncRNzbjCMrNc82-j/exec';
+    const GAS_API_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
 
     let tickets = [];
+    let autoRefreshTimer = null; // 輪詢定時器
 
-    // 初始化：自動向 Google 試算表 抓取資料
-    async function fetchTickets() {
+    // 向 Google 試算表抓取最新資料
+    async function fetchTickets(isSilent = false) {
+        const container = document.getElementById('tracker-list');
+        const refreshIcon = document.getElementById('refresh-icon');
+        
+        // 若不是背景靜默更新，顯示載入狀態
+        if (!isSilent && container) {
+            container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border"><i class="fa-solid fa-spinner fa-spin mr-2"></i>正在讀取最新報修資料...</div>`;
+        }
+        if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
         try {
-            const res = await fetch(GAS_API_URL);
+            // 加入 timestamp 避免瀏覽器快取舊資料
+            const timestamp = new Date().getTime();
+            const res = await fetch(`${GAS_API_URL}?t=${timestamp}`);
             const data = await res.json();
             
             // 轉換試算表欄位名稱為前端格式
@@ -161,6 +173,30 @@
             renderTracker();
         } catch (err) {
             console.error("無法載入資料:", err);
+            if (!isSilent && container) {
+                container.innerHTML = `<div class="text-center py-12 text-red-500 bg-white rounded-xl border"><i class="fa-solid fa-triangle-exclamation mr-2"></i>資料載入失敗，請檢查 API 網址或網路連線。</div>`;
+            }
+        } finally {
+            if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+        }
+    }
+
+    // 開啟/關閉 自動輪詢機制 (每 15 秒背景更新一次)
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        autoRefreshTimer = setInterval(() => {
+            // 只在目前為「進度查詢」頁面時背景自動更新
+            const trackerTab = document.getElementById('tab-tracker');
+            if (trackerTab && !trackerTab.classList.contains('hidden')) {
+                fetchTickets(true); // true 表示背景靜默更新，不影響使用者操作
+            }
+        }, 15000); // 15000 毫秒 = 15 秒
+    }
+
+    function stopAutoRefresh() {
+        if (autoRefreshTimer) {
+            clearInterval(autoRefreshTimer);
+            autoRefreshTimer = null;
         }
     }
 
@@ -180,8 +216,12 @@
             }
         });
 
-        if (tabName === 'tracker') fetchTickets(); // 切換到進度頁時更新資料
-        if (tabName === 'admin') renderAdmin();
+        if (tabName === 'tracker') {
+            fetchTickets();      // 切換進度頁時立即抓取
+            startAutoRefresh();  // 開啟自動輪詢
+        } else {
+            stopAutoRefresh();   // 切換至其他頁面時暫停輪詢，節省資源
+        }
     }
 
     // 送出表單資料至 Google 試算表
@@ -272,8 +312,9 @@
         `).join('');
     }
 
-    // 首次開啟頁面時載入資料
+    // 首次開啟頁面時載入資料並啟動輪詢
     fetchTickets();
+    startAutoRefresh();
 </script>
 </body>
 </html>
